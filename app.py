@@ -170,5 +170,9 @@ def verify_token():
         logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
         return jsonify({'error': f'Error: {str(e)}'}), 500
 
+@app.route('/api/test', methods=['GET'])
+def test():
+    return jsonify({"message": "Merhaba AWS!"})
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=8080, debug=False)
