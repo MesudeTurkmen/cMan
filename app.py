@@ -12,38 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 #######################3
-from gunicorn.app.base import BaseApplication
 
-class FlaskApplication(BaseApplication):
-    def __init__(self, app, options=None):
-        self.options = options or {}
-        self.application = app
-        super().__init__()
-
-    def load(self):
-        return self.application
-
-    def load_config(self):
-        for key, value in self.options.items():
-            self.cfg.set(key, value)
-
-# Firebase'i burada başlat (Gunicorn worker'larından ÖNCE)
-try:
-    # Environment değişkenlerini yükle
-    from dotenv import load_dotenv
-    load_dotenv()
-
-    FIREBASE_SERVICE_ACCOUNT = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH")
-    FIREBASE_DB_URL = os.getenv("FIREBASE_DB_URL")
-
-    cred = credentials.Certificate(FIREBASE_SERVICE_ACCOUNT)
-    firebase_app = firebase_admin.initialize_app(cred, {
-        'databaseURL': FIREBASE_DB_URL
-    })
-    logger.info("✅ Firebase başlatıldı (Gunicorn öncesi)")
-except Exception as e:
-    logger.error(f"❌ Firebase başlatılamadı: {str(e)}")
-    raise SystemExit(1)  # Uygulamayı durdur
 #######################
 
 
