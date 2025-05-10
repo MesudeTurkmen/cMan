@@ -1,72 +1,69 @@
-from flask import Flask, request, jsonify
+# firebase_config.py
 import firebase_admin
-from firebase_admin import credentials, auth, firestore
+from firebase_admin import credentials, db, firestore, auth
 from firebase_admin.exceptions import FirebaseError
 from dotenv import load_dotenv
 import os
+import logging
 
-# Firebase ve Flask Başlatma
+# Loglama ayarları
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Environment değişkenlerini yükle
 load_dotenv()
-cred = credentials.Certificate("cman-smartasst-firebase-adminsdk-fbsvc-0f0ef0dc8e.json")  # Firebase servis anahtarınızın yolu
-firebase_admin.initialize_app(cred)
-db = firestore.client()  # Firestore için
 
-app = Flask(__name__)
-
-@app.route('/signup', methods=['POST'])
-def signup():
+def initialize_firebase() -> db.Reference | None:
+    """
+    Firebase'i başlatır ve Realtime Database root referansını döndürür.
+    
+    Returns:
+        db.Reference | None: Firebase root referansı veya hata durumunda None
+    """
     try:
-        data = request.get_json()
-        email = data.get('email')
-        password = data.get('password')
+        # Firebase zaten başlatılmışsa önbelleği temizle
+        if firebase_admin._apps:
+            firebase_admin.delete_app(firebase_admin.get_app())
+            logger.warning("Mevcut Firebase uygulaması temizlendi")
 
-        # 1. Firebase Authentication'da kullanıcı oluştur
-        user = auth.create_user(email=email, password=password)
+        # Gerekli environment değişkenlerini kontrol et
+        service_account_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH", "cman-smartasst-firebase-adminsdk-fbsvc-0f0ef0dc8e.json")
+        database_url = os.getenv("FIREBASE_DB_URL")
         
-        # 2. Firestore'a ekstra bilgileri kaydet
-        db.collection('users').document(user.uid).set({
-            'email': email,
-            'created_at': firestore.SERVER_TIMESTAMP
+        if not database_url:
+            raise ValueError("FIREBASE_DB_URL environment değişkeni tanımlı değil")
+            
+        if not os.path.exists(service_account_path):
+            raise FileNotFoundError(f"Service account dosyası bulunamadı: {service_account_path}")
+
+        # Firebase'i başlat
+        cred = credentials.Certificate(service_account_path)
+        firebase_app = firebase_admin.initialize_app(cred, {
+            'databaseURL': database_url
         })
         
-        return jsonify({
-            'message': 'Kayıt başarılı!',
-            'uid': user.uid,
-            'email': user.email
-        }), 200
-
-    except FirebaseError as e:
-        return jsonify({'error': f'Firebase hatası: {str(e)}'}), 400
-    except Exception as e:
-        return jsonify({'error': f'Beklenmeyen hata: {str(e)}'}), 500
-
-@app.route('/login', methods=['POST'])
-def login():
-    try:
-        data = request.get_json()
-        email = data.get('email')
-        password = data.get('password')
-
-        # 1. Kullanıcıyı email ile bul
-        user = auth.get_user_by_email(email)
+        # Ek servisleri başlat (Firestore ve Auth)
+        firestore_client = firestore.client()
+        auth_client = auth
         
-        # 2. Şifreyi doğrula (Firebase Authentication ile)
-        # Not: Firebase Admin SDK direkt şifre doğrulamaz, 
-        # bu kısım için Client SDK kullanmanız veya özel bir yöntem gerekir.
-        # Bu örnekte basitçe kullanıcı varlığını kontrol ediyoruz.
+        logger.info("✅ Firebase başarıyla başlatıldı")
+        logger.info(f"Kullanılan Database URL: {database_url}")
         
-        return jsonify({
-            'message': 'Giriş başarılı',
-            'uid': user.uid,
-            'email': user.email
-        }), 200
-
-    except auth.UserNotFoundError:
-        return jsonify({'error': 'Kullanıcı bulunamadı'}), 404
+        return db.reference('/')
+    
+    except (ValueError, FileNotFoundError) as e:
+        logger.error(f"❌ Konfigürasyon hatası: {str(e)}")
+        return None
     except FirebaseError as e:
-        return jsonify({'error': f'Firebase hatası: {str(e)}'}), 400
+        logger.error(f"❌ Firebase hatası: {str(e)}")
+        return None
     except Exception as e:
-        return jsonify({'error': f'Beklenmeyen hata: {str(e)}'}), 500
+        logger.error(f"❌ Beklenmeyen hata: {str(e)}", exc_info=True)
+        return None
 
-if __name__ == '__main__':  
-    app.run(debug=True)
+# Firebase'i başlat ve root referansı al
+root_ref = initialize_firebase()
+
+# Firestore ve Auth istemcilerini global olarak kullanıma sun
+firestore_db = firestore.client() if root_ref else None
+auth_client = auth if root_ref else None
