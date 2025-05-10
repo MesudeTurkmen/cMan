@@ -1,72 +1,142 @@
 from flask import Flask, request, jsonify
 import firebase_admin
-from firebase_admin import credentials, auth, firestore
+from firebase_admin import credentials, auth, firestore, db
 from firebase_admin.exceptions import FirebaseError
 from dotenv import load_dotenv
 import os
+import logging
 
-# Firebase ve Flask Başlatma
+# Loglama ve Environment Yapılandırması
 load_dotenv()
-cred = credentials.Certificate("cman-smartasst-firebase-adminsdk-fbsvc-0f0ef0dc8e.json")  # Firebase servis anahtarınızın yolu
-firebase_admin.initialize_app(cred)
-db = firestore.client()  # Firestore için
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+# Flask Uygulamasını Başlat
 app = Flask(__name__)
 
+# Firebase Başlatma
+try:
+    # Gerekli environment değişkenlerini kontrol et
+    FIREBASE_SERVICE_ACCOUNT = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH")
+    FIREBASE_DB_URL = os.getenv("FIREBASE_DB_URL")
+    
+    if not all([FIREBASE_SERVICE_ACCOUNT, FIREBASE_DB_URL]):
+        raise ValueError("Firebase environment değişkenleri eksik")
+
+    # Önceki bağlantıları temizle
+    if firebase_admin._apps:
+        firebase_admin.delete_app(firebase_admin.get_app())
+        logger.info("Önceki Firebase bağlantısı temizlendi")
+
+    # Firebase'i başlat
+    cred = credentials.Certificate(FIREBASE_SERVICE_ACCOUNT)
+    firebase_app = firebase_admin.initialize_app(cred, {
+        'databaseURL': FIREBASE_DB_URL
+    })
+    
+    # Servisleri başlat
+    firestore_db = firestore.client()
+    realtime_db = db.reference('/')
+    logger.info("✅ Firebase servisleri başlatıldı")
+
+except (ValueError, FileNotFoundError) as e:
+    logger.error(f"❌ Konfigürasyon hatası: {str(e)}")
+    firestore_db = None
+    realtime_db = None
+except FirebaseError as e:
+    logger.error(f"❌ Firebase hatası: {str(e)}")
+    firestore_db = None
+    realtime_db = None
+except Exception as e:
+    logger.error(f"❌ Kritik hata: {str(e)}", exc_info=True)
+    firestore_db = None
+    realtime_db = None
+
+'''# Route'lar
 @app.route('/signup', methods=['POST'])
 def signup():
+    if not firestore_db:
+        return jsonify({"error": "Firebase bağlantı hatası"}), 500
+
     try:
         data = request.get_json()
         email = data.get('email')
         password = data.get('password')
 
-        # 1. Firebase Authentication'da kullanıcı oluştur
+        # Kullanıcı oluştur
         user = auth.create_user(email=email, password=password)
         
-        # 2. Firestore'a ekstra bilgileri kaydet
-        db.collection('users').document(user.uid).set({
+        # Firestore'a kaydet
+        firestore_db.collection('users').document(user.uid).set({
             'email': email,
             'created_at': firestore.SERVER_TIMESTAMP
         })
         
         return jsonify({
-            'message': 'Kayıt başarılı!',
-            'uid': user.uid,
-            'email': user.email
+            "uid": user.uid,
+            "email": user.email,
+            "message": "Kayıt başarılı"
         }), 200
 
-    except FirebaseError as e:
-        return jsonify({'error': f'Firebase hatası: {str(e)}'}), 400
+    except auth.EmailAlreadyExistsError:
+        return jsonify({"error": "Bu email zaten kayıtlı"}), 400
     except Exception as e:
-        return jsonify({'error': f'Beklenmeyen hata: {str(e)}'}), 500
+        logger.error(f"Kayıt hatası: {str(e)}")
+        return jsonify({"error": "Sunucu hatası"}), 500
 
 @app.route('/login', methods=['POST'])
 def login():
+    if not firestore_db:
+        return jsonify({"error": "Firebase bağlantı hatası"}), 500
+
     try:
         data = request.get_json()
         email = data.get('email')
         password = data.get('password')
 
-        # 1. Kullanıcıyı email ile bul
+        # Kullanıcıyı doğrula
         user = auth.get_user_by_email(email)
-        
-        # 2. Şifreyi doğrula (Firebase Authentication ile)
-        # Not: Firebase Admin SDK direkt şifre doğrulamaz, 
-        # bu kısım için Client SDK kullanmanız veya özel bir yöntem gerekir.
-        # Bu örnekte basitçe kullanıcı varlığını kontrol ediyoruz.
-        
         return jsonify({
-            'message': 'Giriş başarılı',
-            'uid': user.uid,
-            'email': user.email
+            "uid": user.uid,
+            "email": user.email,
+            "message": "Giriş başarılı"
         }), 200
 
     except auth.UserNotFoundError:
-        return jsonify({'error': 'Kullanıcı bulunamadı'}), 404
-    except FirebaseError as e:
-        return jsonify({'error': f'Firebase hatası: {str(e)}'}), 400
+        return jsonify({"error": "Kullanıcı bulunamadı"}), 404
     except Exception as e:
-        return jsonify({'error': f'Beklenmeyen hata: {str(e)}'}), 500
+        logger.error(f"Giriş hatası: {str(e)}")
+        return jsonify({"error": "Sunucu hatası"}), 500
+'''
+@app.route('/verify', methods=['POST'])
+def verify_token():
+    try:
+        # Get ID token from the 'Authorization' header
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Missing or invalid authorization header'}), 401
 
-if __name__ == '__main__':  
-    app.run(debug=True)
+        id_token = auth_header.split('Bearer ')[1]
+
+        # Verify the ID token
+        decoded_token = auth.verify_id_token(id_token)
+        uid = decoded_token['uid']
+
+        # You can fetch additional user details (optional)
+        user = auth.get_user(uid)
+
+        return jsonify({
+            'message': 'Token is valid',
+            'uid': uid,
+            'email': user.email,
+            'name': user.display_name
+        }), 200
+
+    except FirebaseError as e:
+        return jsonify({'error': f'Firebase error: {str(e)}'}), 400
+    except Exception as e:
+        return jsonify({'error': f'Error: {str(e)}'}), 500
+
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=False)
