@@ -205,7 +205,7 @@ def get_time(user_id: str) -> str:
         logger.error(f"Hava durumu alınamadı: {str(e)}")
         return {}
     
-print("✅ Weather modülü başarıyla yüklendi!")
+#print("✅ Weather modülü başarıyla yüklendi!")
 # Test kodu
-print(get_weather("Istanbul"))
-print(get_weather("Ankara"))
+#print(get_weather("Istanbul"))
+#print(get_weather("Ankara"))
