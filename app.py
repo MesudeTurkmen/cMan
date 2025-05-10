@@ -5,17 +5,26 @@ from firebase_admin.exceptions import FirebaseError
 from dotenv import load_dotenv
 import os
 import logging
+from routes.firebase_crud import *
+from routes.weather import *
+from routes.auth import *
+from geopy import Nominatim
 
 # Loglama ve Environment Yapılandırması
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-#######################3
+def get_user(email):
+    return db.reference(f'/users/{email}').get()
 
-#######################
-
-
+#konum doğrulama
+def validate_location(location: str) -> bool:
+    try:
+        geolocator = Nominatim(user_agent="weather_app")
+        return bool(geolocator.geocode(location))
+    except:
+        return False
 
 # Flask Uygulamasını Başlat
 app = Flask(__name__)
@@ -58,91 +67,7 @@ except Exception as e:
     firestore_db = None
     realtime_db = None
 
-'''# Route'lar
-@app.route('/signup', methods=['POST'])
-def signup():
-    if not firestore_db:
-        return jsonify({"error": "Firebase bağlantı hatası"}), 500
 
-    try:
-        data = request.get_json()
-        email = data.get('email')
-        password = data.get('password')
-
-        # Kullanıcı oluştur
-        user = auth.create_user(email=email, password=password)
-        
-        # Firestore'a kaydet
-        firestore_db.collection('users').document(user.uid).set({
-            'email': email,
-            'created_at': firestore.SERVER_TIMESTAMP
-        })
-        
-        return jsonify({
-            "uid": user.uid,
-            "email": user.email,
-            "message": "Kayıt başarılı"
-        }), 200
-
-    except auth.EmailAlreadyExistsError:
-        return jsonify({"error": "Bu email zaten kayıtlı"}), 400
-    except Exception as e:
-        logger.error(f"Kayıt hatası: {str(e)}")
-        return jsonify({"error": "Sunucu hatası"}), 500
-
-@app.route('/login', methods=['POST'])
-def login():
-    if not firestore_db:
-        return jsonify({"error": "Firebase bağlantı hatası"}), 500
-
-    try:
-        data = request.get_json()
-        email = data.get('email')
-        password = data.get('password')
-
-        # Kullanıcıyı doğrula
-        user = auth.get_user_by_email(email)
-        return jsonify({
-            "uid": user.uid,
-            "email": user.email,
-            "message": "Giriş başarılı"
-        }), 200
-
-    except auth.UserNotFoundError:
-        return jsonify({"error": "Kullanıcı bulunamadı"}), 404
-    except Exception as e:
-        logger.error(f"Giriş hatası: {str(e)}")
-        return jsonify({"error": "Sunucu hatası"}), 500
-
-#@app.route('/verify', methods=['POST'])
-#def verify_token():
-    try:
-        # Get ID token from the 'Authorization' header
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'error': 'Missing or invalid authorization header'}), 401
-
-        id_token = auth_header.split('Bearer ')[1]
-
-        # Verify the ID token
-        decoded_token = auth.verify_id_token(id_token)
-        uid = decoded_token['uid']
-
-        # You can fetch additional user details (optional)
-        user = auth.get_user(uid)
-
-        return jsonify({
-            'message': 'Token is valid',
-            'uid': uid,
-            'email': user.email,
-            'name': user.display_name
-        }), 200
-
-    except FirebaseError as e:
-        return jsonify({'error': f'Firebase error: {str(e)}'}), 400
-    except Exception as e:
-        return jsonify({'error': f'Error: {str(e)}'}), 500
-'''
 @app.route('/verify-token', methods=['POST'])
 def verify_token():
     data = request.get_json()
@@ -163,10 +88,171 @@ def verify_token():
 def home():
     return "Firebase Auth Flask Backend is running."
 
-
 @app.route('/api/test', methods=['GET'])
 def test():
     return jsonify({"message": "Merhaba AWS!"})
+
+#KULLANICI İŞLEMLERİ
+@app.route('/profile', methods=['PUT'])
+def update_profile():
+    data = request.get_json()
+    email = data.get('email')
+    
+    if not email or not get_user(email):
+        return jsonify({"error": "Geçersiz kullanıcı"}), 400
+    
+    ref = db.reference(f'/users/{email}')
+    ref.update(data)
+    return jsonify({"status": "success"}), 200
+
+@app.route('/profile/location', methods=['PUT'])
+def update_default_location():
+    try:
+        data = request.get_json()
+        new_location = data.get('location')
+        
+        if not validate_location(new_location):
+            return jsonify({"error": "Geçersiz konum"}), 400
+            
+        user_mail = request.user['email']
+        ref = db.reference(f'/users/{user_mail}/location')
+        ref.set(new_location)
+        
+        return jsonify({"status": "Konum güncellendi"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+#KULLANICI İŞLEMLERİ END
+
+#WEATHER.PY ENDPOINTS
+@app.route('/weather', methods=['GET'])
+def get_weather_endpoint():
+    """Hem varsayılan konumu hem de parametreli sorguyu destekler"""
+    try:
+        # 1. Kimlik Doğrulama
+        id_token = request.headers.get('Authorization', '').split('Bearer ')[-1]
+        decoded_token = auth.verify_id_token(id_token)
+        user_email = decoded_token['email']
+        
+        # 2. Konum Parametresini Al
+        requested_location = request.args.get('location')
+        
+        # 3. Konum Belirleme
+        if requested_location:
+            location = requested_location
+            source = "parametre"
+        else:
+            # Firebase'den varsayılan konumu çek
+            user_ref = db.reference(f'/users/{user_email}')
+            user_data = user_ref.get()
+            
+            location = user_data.get('location', 'İstanbul')  # Fallback
+            source = "varsayılan"
+        
+        # 4. Hava Durumu Verisini Çek
+        weather_data = get_weather(location)
+        if not weather_data:
+            return jsonify({"error": "Hava durumu alınamadı"}), 500
+            
+        # 5. Yanıtı Hazırla
+        return jsonify({
+            "requested_by": user_email,
+            "location": location,
+            "source": source,
+            "data": weather_data
+        }), 200
+        
+    except auth.InvalidIdTokenError:
+        return jsonify({"error": "Geçersiz token"}), 401
+    except auth.ExpiredIdTokenError:
+        return jsonify({"error": "Token süresi dolmuş"}),
+
+@app.route('/weather/weekly', methods=['GET'])
+def weekly_weather():
+    """7 günlük hava tahmini (varsayılan konum veya parametre ile)"""
+    try:
+        # 1. Kimlik Doğrulama
+        id_token = request.headers.get('Authorization', '').split('Bearer ')[-1]
+        decoded_token = auth.verify_id_token(id_token)
+        user_email = decoded_token['email']
+
+        # 2. Konum Belirleme
+        requested_location = request.args.get('location')
+        user_ref = db.reference(f'/users/{user_email}')
+        user_data = user_ref.get()
+        
+        location = requested_location or user_data.get('location', 'İstanbul')
+
+        # 3. Haftalık Veriyi Çek
+        api_key = os.getenv("VISUAL_CROSSING_API_KEY")
+        response = requests.get(
+            f"https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/{location}/next7days",
+            params={
+                "unitGroup": "metric",
+                "include": "days",
+                "key": api_key,
+                "contentType": "json"
+            },
+            timeout=15
+        )
+        response.raise_for_status()
+        
+        # 4. Veriyi Formatla
+        weekly_data = []
+        for day in response.json().get('days', []):
+            weekly_data.append({
+                "date": day['datetime'],
+                "temp_max": day['tempmax'],
+                "temp_min": day['tempmin'],
+                "precip_prob": day['precipprob'],
+                "conditions": day['conditions'],
+                "sunrise": day['sunrise'],
+                "sunset": day['sunset']
+            })
+
+        return jsonify({
+            "location": location,
+            "forecast_days": len(weekly_data),
+            "source": "parametre" if requested_location else "varsayılan",
+            "data": weekly_data
+        }), 200
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Haftalık API hatası: {str(e)}")
+        return jsonify({"error": "Hava durumu servisine ulaşılamıyor"}), 503
+    except auth.InvalidIdTokenError:
+        return jsonify({"error": "Geçersiz token"}), 401
+    except Exception as e:
+        logger.error(f"Haftalık tahmin hatası: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
+@app.route('/weather/alerts/<user_id>', methods=['GET'])
+def weather_alerts(user_id: str):
+    """Kullanıcı için aktif meteorolojik uyarılar"""
+    try:
+        location = get_location(user_id)
+        current_data = get_weather(location)
+        
+        # Basit geçmiş veri simülasyonu (gerçekte DB'den alınmalı)
+        previous_data = {
+            "current": {
+                "temp": current_data['current']['temp'] + 5,  # Test için +5°C fark
+                "precip": 0,
+                "wind_speed": 20
+            }
+        }
+        
+        alerts = check_sudden_change(previous_data, current_data)
+        
+        return jsonify({
+            "location": location,
+            "alerts": alerts if alerts else "No active alerts",
+            "last_updated": datetime.now().isoformat()
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Alert hatası: {str(e)}")
+        return jsonify({"error": "Uyarılar getirilemedi"}), 500
+#WEATHER.PY ENDPOINTS END    
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=False)
