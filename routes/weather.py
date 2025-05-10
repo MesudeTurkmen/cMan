@@ -8,33 +8,74 @@ from datetime import datetime
 
 load_dotenv()
 
-# 1. Hava Durumu Verisi Çekme
 def get_weather(city):
+    """OpenWeatherMap One Call API ile 48 saatlik ve 7 günlük tahmin."""
     api_key = os.getenv("OPENWEATHER_API_KEY")
-    base_url = "http://api.openweathermap.org/data/2.5/weather"
     
-    params = {
+    # 1. Şehrin koordinatlarını bul (Geocoding API)
+    geo_url = "http://api.openweathermap.org/geo/1.0/direct"
+    geo_params = {
         'q': city,
-        'appid': api_key,
-        'units': 'metric',
-        'lang': 'tr'
+        'limit': 1,
+        'appid': api_key
     }
+    geo_response = requests.get(geo_url, params=geo_params)
     
-    try:
-        response = requests.get(base_url, params=params)
-        if response.status_code == 200:
-            data = response.json()
-            return {
-                "temp": data['main']['temp'],
-                "description": data['weather'][0]['description'],
-                "humidity": data['main']['humidity'],
-                "timestamp": datetime.now().isoformat()  # Veri çekme zamanı
-            }
-        return None
-    except Exception as e:
-        print("API Hatası:", str(e))
-        return None
-
+    if geo_response.status_code != 200 or not geo_response.json():
+        return jsonify({"error": "Şehir bulunamadı"}), 404
+    
+    lat = geo_response.json()[0]['lat']
+    lon = geo_response.json()[0]['lon']
+    
+    # 2. Hava durumu tahmini (One Call API 3.0)
+    weather_url = "https://api.openweathermap.org/data/3.0/onecall"
+    weather_params = {
+        'lat': lat,
+        'lon': lon,
+        'exclude': 'minutely',
+        'units': 'metric',
+        'lang': 'tr',
+        'appid': api_key
+    }
+    weather_response = requests.get(weather_url, params=weather_params)
+    
+    if weather_response.status_code != 200:
+        return jsonify({"error": "Hava durumu alınamadı"}), 500
+    
+    data = weather_response.json()
+    
+    # 3. Saatlik Tahmin (Önümüzdeki 24 saat)
+    hourly_forecast = []
+    for hour in data['hourly'][:24]:
+        hourly_forecast.append({
+            "saat": datetime.fromtimestamp(hour['dt']).strftime("%H:%M"),
+            "sıcaklık": hour['temp'],
+            "durum": hour['weather'][0]['description'],
+            "yağış olasılığı": f"%{int(hour.get('pop', 0)*100)}",
+            "yağış miktarı (mm)": hour.get('rain', {}).get('1h', 0)
+        })
+    
+    # 4. 5 Günlük Tahmin (Günlük Max/Min)
+    daily_forecast = []
+    for day in data['daily'][:5]:
+        daily_forecast.append({
+            "tarih": datetime.fromtimestamp(day['dt']).strftime("%d.%m"),
+            "max_sıcaklık": day['temp']['max'],
+            "min_sıcaklık": day['temp']['min'],
+            "durum": day['weather'][0]['description']
+        })
+    
+    return jsonify({
+        "şehir": city,
+        "anlık": {
+            "sıcaklık": data['current']['temp'],
+            "hissedilen": data['current']['feels_like'],
+            "nem": f"%{data['current']['humidity']}",
+            "rüzgar": f"{data['current']['wind_speed']} m/s"
+        },
+        "saatlik_tahmin": hourly_forecast,
+        "5_günlük_tahmin": daily_forecast
+    }), 200
 
 def get_time(user_id):
     """Firebase'den kullanıcının bildirim saatini çeker."""
@@ -82,3 +123,5 @@ def schedule_weather_alerts():
                 "message": alert,
                 "timestamp": datetime.now().isoformat()
             })
+
+print(get_weather("Istanbul"))
