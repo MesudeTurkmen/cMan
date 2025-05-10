@@ -1,0 +1,5 @@
+Flask==2.0.1  
+Flask-SQLAlchemy==3.0.1  
+requests==2.26.0          # API istekleri için  
+geopy==2.2.0              # Konum hesaplamaları  
+python-dotenv==0.19.0     # API key'leri saklamak için  
