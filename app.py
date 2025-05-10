@@ -107,9 +107,9 @@ def login():
     except Exception as e:
         logger.error(f"Giriş hatası: {str(e)}")
         return jsonify({"error": "Sunucu hatası"}), 500
-'''
-@app.route('/verify', methods=['POST'])
-def verify_token():
+
+#@app.route('/verify', methods=['POST'])
+#def verify_token():
     try:
         # Get ID token from the 'Authorization' header
         auth_header = request.headers.get('Authorization')
@@ -136,7 +136,39 @@ def verify_token():
         return jsonify({'error': f'Firebase error: {str(e)}'}), 400
     except Exception as e:
         return jsonify({'error': f'Error: {str(e)}'}), 500
+'''
+@app.route('/verify', methods=['POST'])
+def verify_token():
+    try:
+        auth_header = request.headers.get('Authorization')
+        logger.info(f"Authorization header: {auth_header}")  # Log it
 
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Missing or invalid authorization header'}), 401
+
+        id_token = auth_header.split('Bearer ')[1]
+        logger.info(f"ID token received: {id_token[:20]}...")  # Log the first part only
+
+        decoded_token = auth.verify_id_token(id_token)
+        logger.info(f"Decoded token: {decoded_token}")
+
+        uid = decoded_token['uid']
+        user = auth.get_user(uid)
+        logger.info(f"User email: {user.email}")
+
+        return jsonify({
+            'message': 'Token is valid',
+            'uid': uid,
+            'email': user.email,
+            'name': user.display_name or ""
+        }), 200
+
+    except FirebaseError as e:
+        logger.error(f"Firebase error: {str(e)}", exc_info=True)
+        return jsonify({'error': f'Firebase error: {str(e)}'}), 400
+    except Exception as e:
+        logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
+        return jsonify({'error': f'Error: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
