@@ -143,38 +143,26 @@ def login():
     except Exception as e:
         return jsonify({'error': f'Error: {str(e)}'}), 500
 '''
-@app.route('/verify', methods=['POST'])
+@app.route('/verify-token', methods=['POST'])
 def verify_token():
+    data = request.get_json()
+    id_token = data.get('idToken')
+
+    if not id_token:
+        return jsonify({"error": "ID token missing"}), 400
+
     try:
-        auth_header = request.headers.get('Authorization')
-        logger.info(f"Authorization header: {auth_header}")  # Log it
-
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'error': 'Missing or invalid authorization header'}), 401
-
-        id_token = auth_header.split('Bearer ')[1]
-        logger.info(f"ID token received: {id_token[:20]}...")  # Log the first part only
-
+        # Verify the ID token
         decoded_token = auth.verify_id_token(id_token)
-        logger.info(f"Decoded token: {decoded_token}")
-
         uid = decoded_token['uid']
-        user = auth.get_user(uid)
-        logger.info(f"User email: {user.email}")
-
-        return jsonify({
-            'message': 'Token is valid',
-            'uid': uid,
-            'email': user.email,
-            'name': user.display_name or ""
-        }), 200
-
-    except FirebaseError as e:
-        logger.error(f"Firebase error: {str(e)}", exc_info=True)
-        return jsonify({'error': f'Firebase error: {str(e)}'}), 400
+        return jsonify({"message": "Token verified", "uid": uid}), 200
     except Exception as e:
-        logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
-        return jsonify({'error': f'Error: {str(e)}'}), 500
+        return jsonify({"error": str(e)}), 401
+
+@app.route('/')
+def home():
+    return "Firebase Auth Flask Backend is running."
+
 
 @app.route('/api/test', methods=['GET'])
 def test():
