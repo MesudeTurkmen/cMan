@@ -45,6 +45,7 @@ def validate_location(location: dict) -> bool:
         return False
 # -----------------------------------------
 # Flask Uygulamasını Başlat
+
 app = Flask(__name__)
 
 # Firebase Başlatma
@@ -123,6 +124,28 @@ def update_profile():
     ref.update(data)
     return jsonify({"status": "success"}), 200
 
+# @app.route('/profile/location', methods=['PUT'])
+# def update_default_location():
+#     try:
+#         data = request.get_json()
+#         new_location = data.get('location')
+        
+#         if not validate_location(new_location):
+#             return jsonify({"error": "Geçersiz konum"}), 400
+            
+#         id_token=data.get('idToken')
+#         decoded_token = auth.verify_id_token(id_token)
+#         user_mail = decoded_token.get('email')
+
+#         # user_mail = idToken.user['email']
+#         ref = db.reference(f'/users/{user_mail}/location')
+#         ref.set(new_location)
+        
+#         return jsonify({"status": "Konum güncellendi"}), 200
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+#KULLANICI İŞLEMLERİ END
+# ----------------------------------------------------------
 @app.route('/profile/location', methods=['PUT'])
 def update_default_location():
     try:
@@ -131,48 +154,30 @@ def update_default_location():
         
         if not validate_location(new_location):
             return jsonify({"error": "Geçersiz konum"}), 400
-            
-        id_token=data.get('idToken')
-        decoded_token = auth.verify_id_token(id_token)
-        user_mail = decoded_token.get('email')
 
-        # user_mail = idToken.user['email']
-        ref = db.reference(f'/users/{user_mail}/location')
+        id_token = data.get('idToken')
+
+        if not id_token:
+            return jsonify({"error": "idToken is required"}), 400
+
+        # Verify the Firebase token and extract the user email
+        decoded_token = auth.verify_id_token(id_token)
+        user_email = decoded_token.get('email')
+
+        if not user_email:
+            return jsonify({"error": "Email not found in token"}), 400
+
+        # Replace dots in email with commas for Firebase Realtime Database safety
+        safe_email = user_email.replace('.', ',')
+
+        # Save location to Firebase Realtime Database
+        ref = db.reference(f'/users/{safe_email}/location')
         ref.set(new_location)
-        
+
         return jsonify({"status": "Konum güncellendi"}), 200
     except Exception as e:
+        print(f"Error occurred: {str(e)}")  # Log the error message for debugging
         return jsonify({"error": str(e)}), 500
-#KULLANICI İŞLEMLERİ END
-# ----------------------------------------------------------
-# @app.route('/profile/location', methods=['PUT'])
-# def update_default_location():
-#     try:
-#         data = request.get_json()
-#         new_location = data.get('location')
-#         id_token = data.get('idToken')
-
-#         if not id_token:
-#             return jsonify({"error": "idToken is required"}), 400
-
-#         # Verify the Firebase token
-#         decoded_token = auth.verify_id_token(id_token)
-#         user_email = decoded_token.get('email')
-
-#         if not validate_location(new_location):
-#             return jsonify({"error": "Geçersiz konum"}), 400
-
-#         # Replace dots in email for Firebase safety
-#         safe_email = user_email.replace('.', ',')
-
-#         # Save location to Firebase Realtime Database
-#         ref = db.reference(f'/users/{safe_email}/location')
-#         ref.set(new_location)
-
-#         return jsonify({"status": "Konum güncellendi"}), 200
-#     except Exception as e:
-#         print(f"Error occurred: {str(e)}")  # Log the error message for debugging
-#         return jsonify({"error": str(e)}), 500
 
 # ------------------------------------------------------------------
 #WEATHER.PY ENDPOINTS
