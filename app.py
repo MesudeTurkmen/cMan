@@ -19,13 +19,31 @@ def get_user(email):
     return db.reference(f'/users/{email}').get()
 
 #konum doğrulama
-def validate_location(location: str) -> bool:
+# def validate_location(location: str) -> bool:
+#     try:
+#         geolocator = Nominatim(user_agent="weather_app")
+#         return bool(geolocator.geocode(location))
+#     except:
+#         return False
+# ----------------------------------
+def validate_location(location: dict) -> bool:
     try:
-        geolocator = Nominatim(user_agent="weather_app")
-        return bool(geolocator.geocode(location))
-    except:
-        return False
+        # Ensure the location contains 'latitude' and 'longitude'
+        if 'latitude' not in location or 'longitude' not in location:
+            return False
 
+        latitude = location['latitude']
+        longitude = location['longitude']
+
+        # Check if latitude and longitude are within valid ranges
+        if -90 <= latitude <= 90 and -180 <= longitude <= 180:
+            return True
+        else:
+            return False
+    except Exception as e:
+        print(f"Error validating location: {str(e)}")
+        return False
+# -----------------------------------------
 # Flask Uygulamasını Başlat
 app = Flask(__name__)
 
