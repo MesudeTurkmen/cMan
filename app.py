@@ -137,7 +137,7 @@ def update_default_location():
             return jsonify({"error": f"Token verification failed: {str(e)}"}), 400
 
         # Save the new location to Firebase Realtime Database
-        ref = db.reference(f'/users/{user_uid}/location')
+        ref = db.reference(f'users/{user_uid}/location')
         ref.set(new_location)
 
         return jsonify({"status": "Location updated successfully"}), 200
