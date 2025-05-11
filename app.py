@@ -98,8 +98,9 @@ def test():
 def update_default_location():
     try:
         data = request.get_json()
-        new_location = data.get('location')
         id_token = data.get('idToken')
+        new_location = data.get('location')
+        logger.info(f"Yeni konum: {new_location}")
 
         if not new_location:
             return jsonify({"error": "Location is required"}), 400
