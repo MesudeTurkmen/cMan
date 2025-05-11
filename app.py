@@ -94,65 +94,34 @@ def test():
 
 
 
-<<<<<<< HEAD
-#         # user_mail = idToken.user['email']
-#         ref = db.reference(f'/users/{user_mail}/location')
-#         ref.set(new_location)
-        
-#         return jsonify({"status": "Konum güncellendi"}), 200
-#     except Exception as e:
-#         return jsonify({"error": str(e)}), 500
-#KULLANICI İŞLEMLERİ END
-# ----------------------------------------------------------
 @app.route('/profile/location', methods=['PUT'])
 def update_default_location():
     try:
-        # Step 1: Get data from the request
         data = request.get_json()
         new_location = data.get('location')
+        id_token = data.get('idToken')
 
         if not new_location:
             return jsonify({"error": "Location is required"}), 400
-        
-        # Step 2: Validate the location format
-        if not validate_location(new_location):
-            return jsonify({"error": "Geçersiz konum"}), 400
 
-        # Step 3: Get idToken from the request
-        id_token = data.get('idToken')
         if not id_token:
             return jsonify({"error": "idToken is required"}), 400
 
-        # Step 4: Verify the Firebase token and get the UID
         try:
             decoded_token = auth.verify_id_token(id_token)
             user_uid = decoded_token.get('uid')
-            print(f"Decoded Token: {decoded_token}")  # Debugging: print the decoded token
             if not user_uid:
                 return jsonify({"error": "UID not found in token"}), 400
         except Exception as e:
-            print(f"Error verifying token: {str(e)}")  # Log if token verification fails
-            return jsonify({"error": "Token verification failed"}), 400
+            return jsonify({"error": f"Token verification failed: {str(e)}"}), 400
 
-        # Step 5: Construct Firebase Realtime Database reference using UID
-        try:
-            ref = db.reference(f'/users/{user_uid}/location')
-            print(f"Firebase Reference Path: /users/{user_uid}/location")  # Debugging: print the reference path
-            ref.set(new_location)
-        except Exception as e:
-            print(f"Error saving to Firebase: {str(e)}")  # Log if saving to Firebase fails
-            return jsonify({"error": "Failed to save location"}), 500
+        # Save the new location to Firebase Realtime Database
+        ref = db.reference(f'/users/{user_uid}/location')
+        ref.set(new_location)
 
-        # Step 6: Return success response
-        return jsonify({"status": "Konum güncellendi"}), 200
-
+        return jsonify({"status": "Location updated successfully"}), 200
     except Exception as e:
-        print(f"General error occurred: {str(e)}")  # Log general errors
         return jsonify({"error": str(e)}), 500
-
-# ------------------------------------------------------------------
-=======
->>>>>>> f6f327f471cd8e903ba416dbf2349b1cb9178438
 #WEATHER.PY ENDPOINTS
 @app.route('/weather/daily/<user_id>', methods=['GET'])
 def daily_weather(user_id: str):
