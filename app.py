@@ -117,6 +117,7 @@ def update_default_location():
     try:
         data = request.get_json()
         id_token = data.get('idToken')
+        logger.info(f"ID token: {id_token}")
         new_location = data.get('location')
         logger.info(f"New location: {new_location}")
 
@@ -129,7 +130,9 @@ def update_default_location():
         try:
             # Verify the token
             decoded_token = auth.verify_id_token(id_token)
+            logger.info(f"Decoded token: {decoded_token}")
             user_uid = decoded_token.get('uid')
+            logger.info(f"User UID: {user_uid}")
             if not user_uid:
                 return jsonify({"error": "UID not found in token"}), 400
         except Exception as e:
@@ -137,7 +140,7 @@ def update_default_location():
             return jsonify({"error": f"Token verification failed: {str(e)}"}), 400
 
         # Save the new location to Firebase Realtime Database
-        ref = db.reference(f'users/{user_uid}/location')
+        ref = db.reference(f'/users/{user_uid}/location')
         ref.set(new_location)
 
         return jsonify({"status": "Location updated successfully"}), 200
