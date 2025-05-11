@@ -94,23 +94,56 @@ def test():
 
 
 
+# @app.route('/profile/location', methods=['PUT'])
+# def update_default_location():
+#     try:
+#         data = request.get_json()
+#         new_location = data.get('location')
+#         id_token = data.get('idToken')
+        
+#         # if not validate_location(new_location):
+#         #     return jsonify({"error": "Geçersiz konum"}), 400
+           
+#         uid= auth.verify_id_token(id_token)['uid']
+#         ref = db.reference(f'/users/{uid}/location')
+#         ref.set(new_location)
+        
+#         return jsonify({"status": "Konum güncellendi"}), 200
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+
 @app.route('/profile/location', methods=['PUT'])
 def update_default_location():
     try:
         data = request.get_json()
-        new_location = data.get('location')
         id_token = data.get('idToken')
-        
-        # if not validate_location(new_location):
-        #     return jsonify({"error": "Geçersiz konum"}), 400
-           
-        uid= auth.verify_id_token(id_token)['uid']
-        ref = db.reference(f'/users/{uid}/location')
+        new_location = data.get('location')
+        logger.info(f"New location: {new_location}")
+
+        if not new_location:
+            return jsonify({"error": "Location is required"}), 400
+
+        if not id_token:
+            return jsonify({"error": "idToken is required"}), 400
+
+        try:
+            # Verify the token
+            decoded_token = auth.verify_id_token(id_token)
+            user_uid = decoded_token.get('uid')
+            if not user_uid:
+                return jsonify({"error": "UID not found in token"}), 400
+        except Exception as e:
+            # Return a more descriptive error
+            return jsonify({"error": f"Token verification failed: {str(e)}"}), 400
+
+        # Save the new location to Firebase Realtime Database
+        ref = db.reference(f'/users/{user_uid}/location')
         ref.set(new_location)
-        
-        return jsonify({"status": "Konum güncellendi"}), 200
+
+        return jsonify({"status": "Location updated successfully"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 # WEATHER.PY ENDPOINTS
 @app.route('/weather/daily/<user_id>', methods=['GET'])
 def daily_weather(user_id: str):
