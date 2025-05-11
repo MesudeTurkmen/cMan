@@ -99,8 +99,8 @@ def update_default_location():
     try:
         data = request.get_json()
         logger.info(f"Güncellenen veri: {data}")
-        id_token = data.get('idToken')
-        new_location = data.get('location')
+        id_token = data['idToken']
+        new_location = data['location']
         logger.info(f"Yeni konum: {new_location}")
 
         if not new_location:
@@ -111,7 +111,7 @@ def update_default_location():
 
         try:
             decoded_token = auth.verify_id_token(id_token)
-            user_uid = decoded_token.get('uid')
+            user_uid = decoded_token['uid']
             if not user_uid:
                 return jsonify({"error": "UID not found in token"}), 400
         except Exception as e:
