@@ -149,31 +149,47 @@ def update_profile():
 @app.route('/profile/location', methods=['PUT'])
 def update_default_location():
     try:
+        # Step 1: Get data from the request
         data = request.get_json()
         new_location = data.get('location')
+
+        if not new_location:
+            return jsonify({"error": "Location is required"}), 400
         
+        # Step 2: Validate the location format
         if not validate_location(new_location):
             return jsonify({"error": "Geçersiz konum"}), 400
 
+        # Step 3: Get idToken from the request
         id_token = data.get('idToken')
-
         if not id_token:
             return jsonify({"error": "idToken is required"}), 400
 
-        # Verify the Firebase token and extract the user UID
-        decoded_token = auth.verify_id_token(id_token)
-        user_uid = decoded_token.get('uid')
+        # Step 4: Verify the Firebase token and get the UID
+        try:
+            decoded_token = auth.verify_id_token(id_token)
+            user_uid = decoded_token.get('uid')
+            print(f"Decoded Token: {decoded_token}")  # Debugging: print the decoded token
+            if not user_uid:
+                return jsonify({"error": "UID not found in token"}), 400
+        except Exception as e:
+            print(f"Error verifying token: {str(e)}")  # Log if token verification fails
+            return jsonify({"error": "Token verification failed"}), 400
 
-        if not user_uid:
-            return jsonify({"error": "UID not found in token"}), 400
+        # Step 5: Construct Firebase Realtime Database reference using UID
+        try:
+            ref = db.reference(f'/users/{user_uid}/location')
+            print(f"Firebase Reference Path: /users/{user_uid}/location")  # Debugging: print the reference path
+            ref.set(new_location)
+        except Exception as e:
+            print(f"Error saving to Firebase: {str(e)}")  # Log if saving to Firebase fails
+            return jsonify({"error": "Failed to save location"}), 500
 
-        # Save location to Firebase Realtime Database using UID
-        ref = db.reference(f'/users/{user_uid}/location')
-        ref.set(new_location)
-
+        # Step 6: Return success response
         return jsonify({"status": "Konum güncellendi"}), 200
+
     except Exception as e:
-        print(f"Error occurred: {str(e)}")  # Log the error message for debugging
+        print(f"General error occurred: {str(e)}")  # Log general errors
         return jsonify({"error": str(e)}), 500
 
 # ------------------------------------------------------------------
