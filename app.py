@@ -167,7 +167,9 @@ def update_default_location():
 
         return jsonify({"status": "Konum güncellendi"}), 200
     except Exception as e:
+        print(f"Error occurred: {str(e)}")  # Log the error message for debugging
         return jsonify({"error": str(e)}), 500
+
 # ------------------------------------------------------------------
 #WEATHER.PY ENDPOINTS
 @app.route('/weather', methods=['GET'])
