@@ -96,7 +96,7 @@ def test():
 
 @app.route('/profile/location', methods=['PUT'])
 def update_default_location():
-    try:
+   
         data = request.get_json()
         logger.info(f"Güncellenen veri: {data}")
         id_token = data.get('idToken')
@@ -104,21 +104,19 @@ def update_default_location():
         logger.info(f"Yeni konum: {new_location}")
 
        
-        try:
-            decoded_token = auth.verify_id_token(id_token)
-            user_uid = decoded_token['uid']
-            if not user_uid:
-                return jsonify({"error": "UID not found in token"}), 400
-        except Exception as e:
-            return jsonify({"error": f"Token verification failed: {str(e)}"}), 400
+       
+        decoded_token = auth.verify_id_token(id_token)
+        user_uid = decoded_token['uid']
+      
+        
+           
 
         # Save the new location to Firebase Realtime Database
         ref = db.reference(f'/users/{user_uid}/location')
         ref.set(new_location)
 
         return jsonify({"status": "Location updated successfully"}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    
 #WEATHER.PY ENDPOINTS
 @app.route('/weather/daily/<user_id>', methods=['GET'])
 def daily_weather(user_id: str):
