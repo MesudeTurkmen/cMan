@@ -100,7 +100,7 @@ def update_default_location():
         data = request.get_json()
         logger.info(f"Güncellenen veri: {data}")
         id_token = data.get('idToken')
-        new_location = data['location']
+        new_location = data.get('location')
         logger.info(f"Yeni konum: {new_location}")
 
         if not new_location:
