@@ -160,18 +160,15 @@ def update_default_location():
         if not id_token:
             return jsonify({"error": "idToken is required"}), 400
 
-        # Verify the Firebase token and extract the user email
+        # Verify the Firebase token and extract the user UID
         decoded_token = auth.verify_id_token(id_token)
-        user_email = decoded_token.get('email')
+        user_uid = decoded_token.get('uid')
 
-        if not user_email:
-            return jsonify({"error": "Email not found in token"}), 400
+        if not user_uid:
+            return jsonify({"error": "UID not found in token"}), 400
 
-        # Replace dots in email with commas for Firebase Realtime Database safety
-        safe_email = user_email.replace('.', ',')
-
-        # Save location to Firebase Realtime Database
-        ref = db.reference(f'/users/{safe_email}/location')
+        # Save location to Firebase Realtime Database using UID
+        ref = db.reference(f'/users/{user_uid}/location')
         ref.set(new_location)
 
         return jsonify({"status": "Konum güncellendi"}), 200
