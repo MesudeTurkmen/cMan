@@ -103,12 +103,7 @@ def update_default_location():
         new_location = data.get('location')
         logger.info(f"Yeni konum: {new_location}")
 
-        if not new_location:
-            return jsonify({"error": "Location is required"}), 400
-
-        if not id_token:
-            return jsonify({"error": "idToken is required"}), 400
-
+       
         try:
             decoded_token = auth.verify_id_token(id_token)
             user_uid = decoded_token['uid']
